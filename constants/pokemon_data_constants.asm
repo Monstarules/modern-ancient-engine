@@ -175,11 +175,11 @@ DEF NUM_HOF_TEAMS EQU 30
 	const EVOLVE_PARTY
 	const EVOLVE_MAP
 	const EVOLVE_GROUP
-	const EVOLVE_DV
+	const EVOLVE_PV
 	const EVOLVE_CREATE_NEW
 	const CREATE_POKE
 	const EVOLVE_STAT
-EVOLVE_TYPES EQU const_value
+DEF EVOLVE_TYPES EQU const_value
 
 ; EVOLVE_HAPPINESS triggers
 	const_def 1

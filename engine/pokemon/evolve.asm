@@ -64,7 +64,7 @@ EvolveAfterBattle_MasterLoop:
 	ld b, a
 
 	cp EVOLVE_TRADE
-	jr z, .trade
+	jp z, .trade
 
 	ld a, [wLinkMode]
 	and a
@@ -73,6 +73,10 @@ EvolveAfterBattle_MasterLoop:
 	ld a, b
 	cp EVOLVE_ITEM
 	jp z, .item
+	cp EVOLVE_ITEM_MALE
+	jp z, .item_male
+	cp EVOLVE_ITEM_FEMALE
+	jp z, .item_female
 
 	ld a, [wForceEvolution]
 	and a
@@ -81,9 +85,37 @@ EvolveAfterBattle_MasterLoop:
 	ld a, b
 	cp EVOLVE_LEVEL
 	jp z, .level
+	cp EVOLVE_LEVEL_MALE
+	jp z, .level_male
+	cp EVOLVE_LEVEL_FEMALE
+	jp z, .level_female
+
+	cp EVOLVE_HOLD
+	jp z, .hold
+
+	cp EVOLVE_MOVE
+	jp z, .move
+
+	cp EVOLVE_PARTY
+	jp z, .party
+
+	cp EVOLVE_MAP
+	jp z, .map
+
+	cp EVOLVE_GROUP
+	jp z, .group
+
+	cp EVOLVE_PV
+	jp z, .pv
+
+	cp EVOLVE_CREATE_NEW
+	jp z, .create_new
 
 	cp EVOLVE_HAPPINESS
 	jr z, .happiness
+
+	cp EVOLVE_HAPPINESS_MOVE_TYPE
+	jp z, .happiness_move_type
 
 ; EVOLVE_STAT
 	call GetNextEvoAttackByte
@@ -113,6 +145,36 @@ EvolveAfterBattle_MasterLoop:
 	jp nz, .skip_evolution_species
 	jp .proceed
 
+.move
+	call IsMonHoldingEverstone
+	jp z, .skip_evolution_species_parameter
+
+	call GetNextEvoAttackByte
+	ld c, a
+	call GetNextEvoAttackByte
+	ld b, a
+
+	push hl
+	ld h, b
+	ld l, c
+	call GetMoveIDFromIndex
+	pop hl
+
+	ld b, a
+	ld de, wTempMonMoves
+	ld c, NUM_MOVES
+
+.move_loop
+	ld a, [de]
+	cp b
+	jp z, .proceed
+
+	inc de
+	dec c
+	jr nz, .move_loop
+
+	jp .skip_evolution_species
+
 .happiness
 	ld a, [wTempMonHappiness]
 	cp HAPPINESS_TO_EVOLVE
@@ -123,7 +185,7 @@ EvolveAfterBattle_MasterLoop:
 
 	call GetNextEvoAttackByte
 	cp TR_ANYTIME
-	jr z, .proceed
+	jp z, .proceed
 	cp TR_MORNDAY
 	jr z, .happiness_daylight
 
@@ -131,13 +193,45 @@ EvolveAfterBattle_MasterLoop:
 	ld a, [wTimeOfDay]
 	cp NITE_F
 	jp nz, .skip_evolution_species
-	jr .proceed
+	jp .proceed
 
 .happiness_daylight
 	ld a, [wTimeOfDay]
 	cp NITE_F
 	jp z, .skip_evolution_species
-	jr .proceed
+	jp .proceed
+
+.happiness_move_type
+	ld a, [wTempMonHappiness]
+	cp HAPPINESS_TO_EVOLVE
+	jp c, .skip_evolution_species_parameter
+
+	call IsMonHoldingEverstone
+	jp z, .skip_evolution_species_parameter
+
+	call GetNextEvoAttackByte
+	ld b, a
+	ld de, wTempMonMoves
+	ld c, NUM_MOVES
+		
+.move_type_loop
+	ld a, [de]
+
+	push hl
+	ld l, a
+	ld a, MOVE_TYPE
+	call GetMoveAttribute
+	and TYPE_MASK
+	pop hl
+
+	cp b
+	jp z, .proceed
+
+	inc de
+	dec c
+	jr nz, .move_type_loop
+
+	jp .skip_evolution_species
 
 .trade
 	ld a, [wLinkMode]
@@ -150,7 +244,7 @@ EvolveAfterBattle_MasterLoop:
 	call GetNextEvoAttackByte
 	ld b, a
 	inc a
-	jr z, .proceed
+	jp z, .proceed
 
 	ld a, [wLinkMode]
 	cp LINK_TIMECAPSULE
@@ -162,7 +256,54 @@ EvolveAfterBattle_MasterLoop:
 
 	xor a
 	ld [wTempMonItem], a
-	jr .proceed
+	jp .proceed
+
+.hold
+	call GetNextEvoAttackByte
+	ld b, a
+	ld a, [wTempMonItem]
+	cp b
+	jp nz, .skip_evolution_species 
+	xor a
+	ld [wTempMonItem], a
+
+	; Check the time
+	call GetNextEvoAttackByte
+	cp TR_ANYTIME
+	jp z, .proceed
+	cp TR_MORNDAY
+	jr z, .hold_daylight
+
+; TR_NITE
+	ld a, [wTimeOfDay]
+	cp NITE
+	jp nz, .skip_evolution_species
+	jp .proceed
+
+.hold_daylight
+	ld a, [wTimeOfDay]
+	cp NITE
+	jp z, .skip_evolution_species
+	jp .proceed
+
+.item_male
+	ld a, TEMPMON
+	ld [wMonType], a
+	push hl
+	farcall GetGender
+	pop hl
+	jp c, .skip_evolution_species_parameter
+	jp z, .skip_evolution_species_parameter
+	jr .item
+
+.item_female
+	ld a, TEMPMON
+	ld [wMonType], a
+	push hl
+	farcall GetGender
+	pop hl
+	jp c, .skip_evolution_species_parameter
+	jp nz, .skip_evolution_species_parameter
 
 .item
 	call GetNextEvoAttackByte
@@ -177,7 +318,125 @@ EvolveAfterBattle_MasterLoop:
 	ld a, [wLinkMode]
 	and a
 	jp nz, .skip_evolution_species
+	jp .proceed
+
+.party
+	call IsMonHoldingEverstone
+	jp z, .skip_evolution_species_parameter
+	
+	; Check if any of the party mons are the requested one
+	
+	call GetNextEvoAttackByte
+	ld c, a
+	call GetNextEvoAttackByte
+	ld b, a
+
+	push hl
+	ld h, b
+	ld l, c
+	call GetPokemonIDFromIndex
+	pop hl
+
+	ld b, a
+	push hl
+	farcall FindThatSpecies
+	pop hl
+	jp z, .skip_evolution_species
+	jp .proceed
+
+.map
+	call GetNextEvoAttackByte
+	ld b, a
+	ld a, [wMapNumber]
+	cp b
+	jp nz, .skip_evolution_species
+
+	call IsMonHoldingEverstone
+	jp z, .skip_evolution_species_parameter
+
+	jp .proceed
+
+.group
+	call GetNextEvoAttackByte
+	ld b, a
+	ld a, [wMapGroup]
+	cp b
+	jp nz, .skip_evolution_species
+
+	call IsMonHoldingEverstone
+	jp z, .skip_evolution_species_parameter
+
+	jp .proceed
+
+.pv
+	call GetNextEvoAttackByte
+	ld b, a
+	ld a, [wTempMonLevel]
+	cp b
+	jp c, .skip_evolution_species
+
+	call IsMonHoldingEverstone
+	jp z, .skip_evolution_species_parameter
+
+	push hl
+
+	ld hl, wTempMonPersonality
+	ld a, [hli]
+	ldh [hDividend], a
+	ld a, [hl]
+	ldh [hDividend + 1], a
+	ld a, 10
+	ldh [hDivisor], a
+	ld b, 2
+	call Divide
+	ldh a, [hRemainder]
+
+	pop hl
+
+	cp 4
+
+	jp c, .low_pv
+
+	call GetNextEvoAttackByte
+	call GetNextEvoAttackByte
+
+.low_pv
+	jp .proceed
+
+.create_new
+	inc hl
+	inc hl
+	inc hl
+
+	call GetNextEvoAttackByte
+	ld b, a
+	ld a, [wTempMonLevel]
+	cp b
+	jp c, .skip_evolution_species
+
+	call IsMonHoldingEverstone
+	jp z, .skip_evolution_species_parameter
+
 	jr .proceed
+
+.level_male
+	ld a, TEMPMON
+	ld [wMonType], a
+	push hl
+	farcall GetGender
+	pop hl
+	jp c, .skip_evolution_species_parameter
+	jp z, .skip_evolution_species_parameter
+	jr .level
+
+.level_female
+	ld a, TEMPMON
+	ld [wMonType], a
+	push hl
+	farcall GetGender
+	pop hl
+	jp c, .skip_evolution_species_parameter
+	jp nz, .skip_evolution_species_parameter
 
 .level
 	call GetNextEvoAttackByte
@@ -294,6 +553,15 @@ EvolveAfterBattle_MasterLoop:
 	call LearnLevelMoves
 	ld a, [wTempSpecies]
 	call SetSeenAndCaughtMon
+
+	call CheckCreate
+
+	cp 0
+	jr z, .skip_create
+
+	call GiveShedinja
+
+.skip_create
 
 	ld a, [wTempSpecies]
 	call GetPokemonIndexFromID
@@ -627,25 +895,48 @@ GetLowestEvolutionStage:
 	ld [wCurPartySpecies], a
 	ret
 
-SkipEvolutions::
-; Receives a pointer to the evos and attacks for a mon in b:hl, and skips to the attacks.
-	ld a, b
-	call GetFarByte
-	inc hl
-	and a
-	ret z
-	cp EVOLVE_STAT
-	jr nz, .no_extra_skip
-	inc hl
-.no_extra_skip
-	inc hl
-	inc hl
-	inc hl
-	jr SkipEvolutions
+	SkipEvolutions::
+	; Receives a pointer to the evos and attacks for a mon in b:hl, and skips to the attacks.
+		ld a, b
+		call GetFarByte
+		inc hl
+		and a
+		ret z
+		cp EVOLVE_MOVE
+		jr z, .inc4
+		cp EVOLVE_HOLD
+		jr z, .inc4
+		cp EVOLVE_PARTY
+		jr z, .inc4
+		cp EVOLVE_STAT
+		jr z, .inc4
+		jr .inc3
+	
+	.inc5
+		inc hl
+	.inc4
+		inc hl
+	.inc3
+		inc hl
+		inc hl
+		inc hl
+		jr SkipEvolutions
 
 DetermineEvolutionItemResults::
+	push bc
+	push de
+	farcall GetGender
+	ld a, -1
+	jr c, .got_gender
+	ld a, 1
+	jr nz, .got_gender
+	xor a
+.got_gender
+	pop de
+	pop bc
+	ld c, a
 ; in: b:de: pointer to evos and attacks struct, wCurItem: item
-; out: de: species ID or zero; a, b, hl: clobbered
+; out: de: species ID or zero; a, b, c, hl: clobbered
 	ld h, d
 	ld l, e
 	ld de, 0
@@ -658,14 +949,33 @@ DetermineEvolutionItemResults::
 	cp EVOLVE_STAT
 	jr z, .skip_species_two_parameters
 	cp EVOLVE_ITEM
+	jr z, .item
+	cp EVOLVE_ITEM_FEMALE
+	jr z, .item_female
+	cp EVOLVE_ITEM_MALE
 	jr nz, .skip_species_parameter
+
+.item_male
+	ld a, c
+	and a
+	jr z, .skip_species
+	inc a
+	jr z, .skip_species
+	jr .item
+
+.item_female
+	ld a, c
+	and a
+	jr nz, .skip_species
+
+.item
 	call GetNextEvoAttackByte
-	ld b, a
+	ld b, a	
 	ld a, [wCurItem]
 	cp b
 	jr nz, .skip_species
 	ldh a, [hTemp]
-	call GetFarWord
+	call GetFarHalfword
 	ld d, h
 	ld e, l
 	ret
@@ -683,4 +993,161 @@ GetNextEvoAttackByte:
 	ldh a, [hTemp]
 	call GetFarByte
 	inc hl
+	ret
+
+GiveShedinja:
+
+; Generate Current Mon's OT Name
+	push hl
+	ld a, [wCurPartyMon]
+	ld bc, 11
+	ld hl, wPartyMonOTs
+
+	call AddNTimes
+
+	ld e, l
+	ld d, h
+	pop hl
+	push de
+
+; Set wMonType to Party
+	ld a, 0
+	ld [wMonType], a
+
+
+; Set Mon to be generated as SHEDINJA
+; Add to Party
+;	call GetNextEvoAttackByte
+;	ld c, a
+;	call GetNextEvoAttackByte
+;	ld b, a
+;
+;	push hl
+;	ld h, b
+;	ld l, c
+	ld hl, SHEDINJA
+	call GetPokemonIDFromIndex
+;	pop hl
+	ld [wCurPartySpecies], a
+	predef TryAddMonToParty
+
+; Get Current Mon's OT Name
+; Set the OT Name of the last Mon in party
+
+	pop de
+
+	ld a, [wPartyCount]
+	dec a
+	ld hl, wPartyMonOTs
+	call SkipNames
+	call CopyName2
+
+
+; Starting at Move 1 in the Pokemon Data Structure,
+; transfer the Evolved Mon's next 29 bytes
+;  (up to, but not including, Level)
+
+	ld bc, PARTYMON_STRUCT_LENGTH
+	ld a, [wPartyCount]
+	dec a
+
+	ld hl, wPartyMon1Moves
+	call AddNTimes
+
+	push hl
+
+	ld bc, PARTYMON_STRUCT_LENGTH
+	ld a, [wCurPartyMon]
+
+	ld hl, wPartyMon1Moves
+	call AddNTimes
+
+	ld e, l
+	ld d, h
+	
+	pop hl
+	ld b, 0
+
+.loop
+
+	ld a, [de]
+	ld [hl], a
+
+	inc de
+	inc hl
+
+	inc b
+
+	ld a, b
+
+	cp 29
+
+	jr nz, .loop
+
+; Set the approprite Caught Data for the new mon
+	ld b, 0
+	farcall SetGiftPartyMonCaughtData
+
+	ret
+
+CheckCreate:
+	ld a, [wPartyCount]
+	cp 6
+
+	jp z, .do_not_create
+
+	ld a, [wEvolutionOldSpecies]
+	call GetPokemonIndexFromID
+	ld b, h
+	ld c, l
+	ld hl, EvosAttacksPointers
+	ld a, BANK(EvosAttacksPointers)
+	call LoadDoubleIndirectPointer
+	ldh [hTemp], a
+
+	call GetNextEvoAttackByte
+	cp EVOLVE_CREATE_NEW
+
+	jr nz, .do_not_create
+
+	ld a, [wCurItem]
+	ld b, a
+
+	call GetNextEvoAttackByte
+	push hl
+	ld d, a
+	ld [wCurItem], a
+	ld hl, wNumItems
+	call CheckItem
+
+	jr c, .takeBall
+
+	ld a, b
+	ld [wCurItem], a
+
+	pop hl
+
+	jp .do_not_create
+
+.takeBall
+
+	ld a, d
+	ld [wCurItem], a
+	ld hl, wNumItems
+	ld a, 1
+	ld [wItemQuantityChange], a
+	call TossItem
+
+	ld a, b
+	ld [wCurItem], a
+
+	pop hl
+
+	ld a, 1
+
+	ret
+
+.do_not_create
+	ld a, 0
+
 	ret
