@@ -30,7 +30,7 @@ nearly 300 Pokemon not in the regional dex. (E.G Ancient Ruby, and `master` will
 * PiaCRT
 * DarkZeta
 * BloodlessNS
-* MonstaRules
+* Monstarules/Monstaahrules
 * Scarlax
 
 ## Credits
